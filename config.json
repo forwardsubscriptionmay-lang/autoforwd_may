@@ -1,0 +1,14 @@
+{
+  "sources": {},
+  "targets": {},
+  "mapping": {},
+  "settings": {
+    "forward": true,
+    "media": true,
+    "remove_links": false,
+    "remove_username": false,
+    "auto_delete": false,
+    "blacklist": [],
+    "replace_link": null
+  }
+}
