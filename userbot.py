@@ -2,7 +2,6 @@ import os
 import json
 import re
 import asyncio
-import tempfile
 
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -96,7 +95,8 @@ async def safe_send(
                 int(target),
                 file=file,
                 caption=text,
-                reply_to=reply
+                reply_to=reply,
+                force_document=False
             )
 
         # TEXT
@@ -125,7 +125,7 @@ async def safe_send(
 
 
 # =========================================
-# FAST MEDIA SYSTEM
+# FAST RAM MEDIA SYSTEM
 # =========================================
 async def smart_forward(
     event,
@@ -148,25 +148,43 @@ async def smart_forward(
 
         print("FAST STREAM FAILED:", er)
 
-    # RESTRICTED CHANNEL FALLBACK
+    # RESTRICTED CHANNEL RAM FALLBACK
+    path = None
+
     try:
 
-        with tempfile.NamedTemporaryFile(delete=True) as tmp:
+        path = f"/dev/shm/{event.id}"
 
-            path = await event.download_media(
-                file=tmp.name
-            )
+        path = await event.download_media(
+            file=path
+        )
 
-            return await safe_send(
-                target,
-                text,
-                path,
-                reply_to
-            )
+        sent = await safe_send(
+            target,
+            text,
+            path,
+            reply_to
+        )
+
+        # CLEAN RAM
+        try:
+            os.remove(path)
+        except:
+            pass
+
+        return sent
 
     except Exception as er:
 
-        print("DOWNLOAD FALLBACK ERROR:", er)
+        print("RAM DOWNLOAD ERROR:", er)
+
+        # CLEAN RAM
+        if path:
+
+            try:
+                os.remove(path)
+            except:
+                pass
 
     return None
 
@@ -185,7 +203,7 @@ async def album_handler(event):
 
     processed_groups.add(gid)
 
-    # WAIT FOR COMPLETE ALBUM
+    # WAIT FOR FULL ALBUM
     await asyncio.sleep(2)
 
     data = load()
@@ -221,7 +239,7 @@ async def album_handler(event):
     if not files:
         return
 
-    for target in targets:
+    async def send_album(target):
 
         try:
 
@@ -249,19 +267,17 @@ async def album_handler(event):
 
             except Exception:
 
-                # FALLBACK FOR RESTRICTED
+                # RAM FALLBACK
                 temp_files = []
 
                 for msg in event.messages:
 
                     if msg.media:
 
-                        tmp = tempfile.NamedTemporaryFile(
-                            delete=False
-                        )
+                        path = f"/dev/shm/{msg.id}"
 
                         path = await msg.download_media(
-                            file=tmp.name
+                            file=path
                         )
 
                         temp_files.append(path)
@@ -273,7 +289,7 @@ async def album_handler(event):
                     reply_to=reply_to
                 )
 
-                # CLEAN TEMP FILES
+                # CLEAN RAM
                 for p in temp_files:
 
                     try:
@@ -306,6 +322,11 @@ async def album_handler(event):
 
             print("ALBUM ERROR:", er)
 
+    # PARALLEL TARGET SEND
+    await asyncio.gather(
+        *[send_album(target) for target in targets]
+    )
+
 
 # =========================================
 # NORMAL MESSAGE HANDLER
@@ -337,7 +358,7 @@ async def forward_handler(event):
     if text is None:
         return
 
-    for target in targets:
+    async def send_to_target(target):
 
         try:
 
@@ -373,7 +394,7 @@ async def forward_handler(event):
                     reply_to
                 )
 
-            # SAVE MAP
+            # SAVE MESSAGE MAP
             if sent:
 
                 msg_map.setdefault(
@@ -384,6 +405,11 @@ async def forward_handler(event):
         except Exception as er:
 
             print("FORWARD ERROR:", er)
+
+    # PARALLEL TARGET SEND
+    await asyncio.gather(
+        *[send_to_target(target) for target in targets]
+    )
 
 
 # =========================================
